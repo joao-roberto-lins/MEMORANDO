@@ -384,19 +384,35 @@ export const appRouter = router({
           descricao: `Memorando enviado com protocolo ${numeroProtocolo}`,
         });
 
-        // Enviar email para o setor destinatario
-        const setorDestinatario = await getSetorById(memorando.destinatario_setor_id);
-        const usuarioRemetente = await getUserById(memorando.remetente_id);
-        const setorRemetente = await getSetorById(memorando.setor_id);
+        // --- LÓGICA DE ENVIO DE E-MAIL APRIMORADA ---
+        try {
+            const setorDestinatario = await getSetorById(memorando.destinatario_setor_id);
+            const usuarioRemetente = await getUserById(memorando.remetente_id);
+            const setorRemetente = await getSetorById(memorando.setor_id);
+            let emailDestino = setorDestinatario?.email;
+            
+            // Se o setor não tiver e-mail, tenta o usuário destinatário específico
+            if (!emailDestino && memorando.destinatario_usuario_id) {
+                const usuarioDestinatario = await getUserById(memorando.destinatario_usuario_id);
+                emailDestino = usuarioDestinatario?.email || undefined;
+            }
 
-        if (setorDestinatario?.email) {
-          await sendMemorandoNotification(
-            setorDestinatario.email,
-            memorando.numero,
-            memorando.assunto,
-            usuarioRemetente?.name || "Sistema",
-            setorRemetente?.nome || "N/A"
-          );
+            console.log(`[Email Debug] Tentando enviar memorando ${memorando.numero}. Destino: ${emailDestino || "NÃO ENCONTRADO"}`);
+
+            if (emailDestino) {
+              await sendMemorandoNotification(
+                emailDestino,
+                memorando.numero,
+                memorando.assunto,
+                usuarioRemetente?.name || "Sistema",
+                setorRemetente?.nome || "N/A"
+              );
+            } else {
+                console.warn(`[Email Warning] Nenhum e-mail encontrado para o memorando ${memorando.id}. Setor: ${setorDestinatario?.nome}`);
+            }
+        } catch (emailError) {
+            console.error("[Email Error] Falha ao processar envio de notificação:", emailError);
+            // Não bloqueia o retorno de sucesso do envio do memorando, apenas loga o erro
         }
 
         return { success: true, protocolo: numeroProtocolo };
